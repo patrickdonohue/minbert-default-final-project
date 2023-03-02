@@ -46,8 +46,21 @@ class BertSelfAttention(nn.Module):
     # multiply the attention scores to the value and get back V'
     # next, we need to concat multi-heads and recover the original shape [bs, seq_len, num_attention_heads * attention_head_size = hidden_size]
 
-    ### TODO
-    raise NotImplementedError
+    # ### TODO
+    # raise NotImplementedError
+    print(attention_mask)
+    print(key)
+    print(query)
+    print(value)
+
+    temp = torch.matmul(query, torch.transpose(key)) #should be dim [bs, num_attention_heads, seq_len, seq_len]
+    bs, num_attention_heads, seq_len, _ = temp.shape()
+    temp = temp / torch.sqrt(key.shape()[1]) #key should be d_k by d_k?? Why do we both with this if we wil softmax anyway?
+    temp = temp + attention_mask
+    temp = nn.softmax(temp, dim = 1) #correct dim??
+    V = 0 ## todo this will be different, what is V?
+    temp = torch.matmul(temp, V)
+    temp = torch.reshape(temp, (bs, seq_len, num_attention_heads * self.attention_head_size))
 
 
   def forward(self, hidden_states, attention_mask):
