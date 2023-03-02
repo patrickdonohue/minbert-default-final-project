@@ -1,0 +1,8 @@
+filelock
+importlib-metadata
+requests
+scikit-learn
+tokenizers
+torch
+tqdm
+numpy
