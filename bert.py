@@ -48,19 +48,29 @@ class BertSelfAttention(nn.Module):
 
     # ### TODO
     # raise NotImplementedError
-    print(attention_mask)
-    print(key)
-    print(query)
-    print(value)
+    # print(attention_mask)
+    # print(key)
+    # print(query)
+    # print(value)
 
-    temp = torch.matmul(query, torch.transpose(key)) #should be dim [bs, num_attention_heads, seq_len, seq_len]
-    bs, num_attention_heads, seq_len, _ = temp.shape()
-    temp = temp / torch.sqrt(key.shape()[1]) #key should be d_k by d_k?? Why do we both with this if we wil softmax anyway?
-    temp = temp + attention_mask
-    temp = nn.softmax(temp, dim = 1) #correct dim??
-    V = 0 ## todo this will be different, what is V?
-    temp = torch.matmul(temp, V)
-    temp = torch.reshape(temp, (bs, seq_len, num_attention_heads * self.attention_head_size))
+    # temp = torch.matmul(query, torch.transpose(key)) #should be dim [bs, num_attention_heads, seq_len, seq_len]
+    # bs, num_attention_heads, seq_len, _ = temp.shape()
+    # temp = temp / torch.sqrt(key.shape()[1]) #key should be d_k by d_k?? Why do we both with this if we wil softmax anyway?
+    # temp = temp + attention_mask
+    # temp = nn.softmax(temp, dim = 1) #correct dim??
+    # temp = torch.matmul(temp, V)
+    # temp = torch.reshape(temp, (bs, seq_len, num_attention_heads * self.attention_head_size))
+
+    S = torch.matmul(query, torch.transpose(key)) # dim = [bs, num_attention_heads, seq_len, seq_len]
+    bs, num_attention_heads, seq_len, _ = S.shape()
+    S = S / torch.sqrt(key.shape()[1])
+    S = S + attention_mask
+    S = nn.softmax(S, dim = 1)
+    print("shape of value: ", value.shape())
+    S = torch.matmul(S, value)
+    S = torch.reshape(S, (bs, seq_len, num_attention_heads * self.attention_head_size))
+
+  
 
 
   def forward(self, hidden_states, attention_mask):
