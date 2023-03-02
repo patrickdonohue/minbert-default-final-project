@@ -1,7 +1,7 @@
 import time, random, numpy as np, argparse, sys, re, os
 from types import SimpleNamespace
 import csv
-
+import os
 import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
@@ -12,6 +12,8 @@ from tokenizer import BertTokenizer
 from bert import BertModel
 from optimizer import AdamW
 from tqdm import tqdm
+# import tensorflow as tf
+
 
 
 TQDM_DISABLE=False
@@ -27,6 +29,7 @@ def seed_everything(seed=11711):
 
 class BertSentimentClassifier(torch.nn.Module):
     '''
+
     This module performs sentiment classification using BERT embeddings on the SST dataset.
 
     In the SST dataset, there are 5 sentiment categories (from 0 - "negative" to 4 - "positive").
@@ -43,9 +46,16 @@ class BertSentimentClassifier(torch.nn.Module):
                 param.requires_grad = False
             elif config.option == 'finetune':
                 param.requires_grad = True
+        self.hidden_size = config.hidden_size
+        self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = torch.nn.Linear(self.hidden_size, self.num_labels)
+        # config = {'hidden_dropout_prob': args.hidden_dropout_prob,
+            #   'num_labels': num_labels,
+            #   'hidden_size': 768,
+            #   'data_dir': '.',
+            #   'option': args.option}
 
-        ### TODO
-        raise NotImplementedError
+
 
 
     def forward(self, input_ids, attention_mask):
@@ -53,8 +63,12 @@ class BertSentimentClassifier(torch.nn.Module):
         # The final BERT contextualized embedding is the hidden state of [CLS] token (the first token).
         # HINT: you should consider what is the appropriate output to return given that
         # the training loop currently uses F.cross_entropy as the loss function.
-        ### TODO
-        raise NotImplementedError
+        outputs = self.bert(input_ids, attention_mask)
+        pooler_output = outputs['pooler_output']
+        pooler_output = self.dropout(pooler_output)
+        logits = self.classifier(pooler_output)
+        return logits
+
 
 
 
@@ -346,7 +360,14 @@ def get_args():
     return args
 
 if __name__ == "__main__":
+
+    # device_name = tf.test.gpu_device_name()
+    # if not device_name:
+    #     raise SystemError('GPU device not found')
+    # print('Found GPU at: {}'.format(device_name))
+    # os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     args = get_args()
+
     seed_everything(args.seed)
     #args.filepath = f'{args.option}-{args.epochs}-{args.lr}.pt'
 
