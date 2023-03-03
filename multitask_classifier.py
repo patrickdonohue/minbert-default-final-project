@@ -199,6 +199,8 @@ def train_multitask(args):
 
         print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
 
+    test_model_multitask(args, model, device)
+
 
 
 def test_model(args):
