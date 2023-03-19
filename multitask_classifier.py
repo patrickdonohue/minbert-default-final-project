@@ -253,12 +253,14 @@ def get_args():
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-5)
     parser.add_argument("--save_model_dir", type=str, default = "models")
+    parser.add_argument("--bert_hidden_size", type=int, default = 768)
 
     args = parser.parse_args()
     return args
 
 if __name__ == "__main__":
     args = get_args()
+    BERT_HIDDEN_SIZE = args.bert_hidden_size
     args.filepath = f'{args.save_model_dir}/{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
     #args.filepath = f'{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
     seed_everything(args.seed)  # fix the seed for reproducibility
