@@ -142,8 +142,8 @@ def model_eval_multitask(sentiment_dataloader,
 
         sentiment_accuracy = np.mean(np.array(sst_y_pred) == np.array(sst_y_true))
 
-        print(f'Paraphrase detection accuracy: {paraphrase_accuracy:.3f}')
         print(f'Sentiment classification accuracy: {sentiment_accuracy:.3f}')
+        print(f'Paraphrase detection accuracy: {paraphrase_accuracy:.3f}')
         print(f'Semantic Textual Similarity correlation: {sts_corr:.3f}')
 
         return (paraphrase_accuracy, para_y_pred, para_sent_ids,
@@ -301,3 +301,29 @@ def test_model_multitask(args, model, device):
             f.write(f"id \t Predicted_Similiary \n")
             for p, s in zip(test_sts_sent_ids, test_sts_y_pred):
                 f.write(f"{p} , {s} \n")
+
+        return {'sentiment_classification_accuracy': dev_sentiment_accuracy, 
+                'paraphrase_detection_acccuracy': dev_paraphrase_accuracy,
+                'semantic_textual_similarity_correlation': dev_sts_corr}
+
+
+# NAME = 'model_summaries.csv'
+# STATS = ['lr', 'option', 'dropout_prob', 'epochs', 'paraphrase_detection_acccuracy', 
+#          'sentiment_classification_accuracy', 'semantic_textual_similarity_correlation']
+# def createDataframe():
+#     print("CREATING DATAFRAME, CLOBBERING OLD THINGS")
+#     stats = ['lr', 'sts_acc', 'corr']
+#     df = pd.DataFrame(data = [], columns = stats)
+#     df.to_csv(NAME, index = False)
+#     print(df)
+#     return
+
+# def saveStats(newData):
+#     d = {}
+#     for i in range(len(STATS)):
+#         d[STATS[i]] = newData[i]
+#     df = pd.read_csv(NAME)
+#     df = df.append(d, ignore_index = True)
+#     df.to_csv(NAME, index = False)
+#     print(df)
+#     return

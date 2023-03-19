@@ -1,6 +1,9 @@
 import time, random, numpy as np, argparse, sys, re, os
 from types import SimpleNamespace
 
+import pandas as pd
+import numpy as np
+
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -124,8 +127,9 @@ def save_model(model, optimizer, args, config, filepath):
         'torch_rng': torch.random.get_rng_state(),
     }
 
-    torch.save(save_info, filepath)
-    print(f"save the model to {filepath}")
+    # torch.save(save_info, filepath)
+    # print(f"save the model to {filepath}")
+    print("WE AREN'T SAVING MODELS THESE DAYS - TOO MUCH SPACE")
 
 
 ## Currently only trains on sst dataset
@@ -257,10 +261,37 @@ def get_args():
     args = parser.parse_args()
     return args
 
+NAME = 'model_summaries.csv'
+STATS = ['lr', 'option', 'dropout_prob', 'epochs', 'paraphrase_detection_acccuracy', 
+         'sentiment_classification_accuracy', 'semantic_textual_similarity_correlation']
+def createDataframe():
+    print("CREATING DATAFRAME, CLOBBERING OLD THINGS")
+    df = pd.DataFrame(data = [], columns = STATS)
+    df.to_csv(NAME, index = False)
+    print(df)
+    return
+
+def saveStats(newData):
+    # d = {}
+    # for i in range(len(STATS)):
+    #     d[STATS[i]] = newData[i]
+    df = pd.read_csv(NAME)
+    df = df.append(newData, ignore_index = True)
+    df.to_csv(NAME, index = False)
+    print(df)
+    return
+
+
 if __name__ == "__main__":
     args = get_args()
     args.filepath = f'{args.save_model_dir}/{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
     #args.filepath = f'{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
     seed_everything(args.seed)  # fix the seed for reproducibility
-    train_multitask(args)
-    test_model(args)
+    #train_multitask(args)
+    hyperparams = {'lr': args.lr, 'option': args.option, 'epochs':args.epochs, 
+                    'dropout_prob': args.hidden_dropout_prob}
+    stats = test_model(args)
+    print(stats)
+    hyperparams.update(stats)
+    saveStats(results)
+
