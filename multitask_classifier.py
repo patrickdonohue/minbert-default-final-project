@@ -10,8 +10,7 @@ from bert import BertModel
 from optimizer import AdamW
 from tqdm import tqdm
 
-from datasets import SentenceClassificationDataset, SentencePairDataset, \
-    load_multitask_data, load_multitask_test_data
+from datasets import SentenceClassificationDataset, SentencePairDataset, load_multitask_data, load_multitask_test_data
 
 from evaluation import model_eval_sst, test_model_multitask
 
@@ -86,9 +85,7 @@ class MultitaskBERT(nn.Module):
         
 
 
-    def predict_paraphrase(self,
-                           input_ids_1, attention_mask_1,
-                           input_ids_2, attention_mask_2):
+    def predict_paraphrase(self,input_ids_1, attention_mask_1, input_ids_2, attention_mask_2):
         '''Given a batch of pairs of sentences, outputs a single logit for predicting whether they are paraphrases.
         Note that your output should be unnormalized (a logit); it will be passed to the sigmoid function
         during evaluation, and handled as a logit by the appropriate loss function.
@@ -101,9 +98,7 @@ class MultitaskBERT(nn.Module):
         return paraphrase_logits
 
 
-    def predict_similarity(self,
-                           input_ids_1, attention_mask_1,
-                           input_ids_2, attention_mask_2):
+    def predict_similarity(self, input_ids_1, attention_mask_1, input_ids_2, attention_mask_2):
         '''Given a batch of pairs of sentences, outputs a single logit corresponding to how similar they are.
         Note that your output should be unnormalized (a logit); it will be passed to the sigmoid function
         during evaluation, and handled as a logit by the appropriate loss function.
@@ -138,8 +133,8 @@ def train_multitask(args):
     device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
     # Load data
     # Create the data and its corresponding datasets and dataloader
-    sst_train_data, num_labels,para_train_data, sts_train_data = load_multitask_data(args.sst_train,args.para_train,args.sts_train, split ='train')
-    sst_dev_data, num_labels,para_dev_data, sts_dev_data = load_multitask_data(args.sst_dev,args.para_dev,args.sts_dev, split ='train')
+    sst_train_data, num_labels,para_train_data, sts_train_data, nli_train_data = load_multitask_data(args.nli_train, args.sst_train,args.para_train,args.sts_train, split ='train')
+    sst_dev_data, num_labels,para_dev_data, sts_dev_data, nli_train_data = load_multitask_data(args.nli_train, args.sst_dev,args.para_dev,args.sts_dev, split ='train')
 
     sst_train_data = SentenceClassificationDataset(sst_train_data, args)
     sst_dev_data = SentenceClassificationDataset(sst_dev_data, args)
@@ -253,14 +248,17 @@ def get_args():
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-5)
     parser.add_argument("--save_model_dir", type=str, default = "models")
-    parser.add_argument("--bert_hidden_size", type=int, default = 768)
+
+    parser.add_argument('--nli_train', type=str, default='data/nli_for_simcse-train.csv')
+    parser.add_argument('--nli_dev', type=str, default='data/nli_for_simcse-dev.csv')
+    parser.add_argument('--nli_test', type=str, default='data/nli_for_simcse-test.csv')
+
 
     args = parser.parse_args()
     return args
 
 if __name__ == "__main__":
     args = get_args()
-    BERT_HIDDEN_SIZE = args.bert_hidden_size
     args.filepath = f'{args.save_model_dir}/{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
     #args.filepath = f'{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
     seed_everything(args.seed)  # fix the seed for reproducibility

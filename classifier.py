@@ -329,6 +329,9 @@ def test(args):
         print('DONE DEV')
         test_pred, test_sents, test_sent_ids = model_test_eval(test_dataloader, model, device)
         print('DONE Test')
+        print('dev and test filepaths')
+        print(args.dev_out)
+        print(args.test_out)
         with open(args.dev_out, "w+") as f:
             print(f"dev acc :: {dev_acc :.3f}")
             f.write(f"id \t Predicted_Sentiment \n")
@@ -339,6 +342,8 @@ def test(args):
             f.write(f"id \t Predicted_Sentiment \n")
             for p, s  in zip(test_sent_ids,test_pred ):
                 f.write(f"{p} , {s} \n")
+        print('finished saving predictions')
+
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=11711)

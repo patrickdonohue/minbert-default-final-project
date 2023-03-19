@@ -211,6 +211,7 @@ def load_multitask_test_data():
     paraphrase_filename = f'data/quora-test.csv'
     sentiment_filename = f'data/ids-sst-test.txt'
     similarity_filename = f'data/sts-test.csv'
+    nli_for_simcse_filename = f'data/nli_for_simcse-test.csv'
 
     sentiment_data = []
 
@@ -241,11 +242,13 @@ def load_multitask_test_data():
 
     print(f"Loaded {len(similarity_data)} test examples from {similarity_filename}")
 
-    return sentiment_data, paraphrase_data, similarity_data
+    nli_for_simcse_data = load_nli_for_simcse_data(nli_for_simcse_filename, split='test')
+
+    return sentiment_data, paraphrase_data, similarity_data, nli_for_simcse_data
 
 
 
-def load_multitask_data(sentiment_filename,paraphrase_filename,similarity_filename,split='train'):
+def load_multitask_data(nli_for_simcse_filename, sentiment_filename,paraphrase_filename,similarity_filename,split='train'):
     sentiment_data = []
     num_labels = {}
     if split == 'test':
@@ -305,5 +308,25 @@ def load_multitask_data(sentiment_filename,paraphrase_filename,similarity_filena
                                         float(record['similarity']),sent_id))
 
     print(f"Loaded {len(similarity_data)} {split} examples from {similarity_filename}")
+    nli_for_simcse_data = load_nli_for_simcse_data(nli_for_simcse_filename, split)
+    return sentiment_data, num_labels, paraphrase_data, similarity_data, nli_for_simcse_data
 
-    return sentiment_data, num_labels, paraphrase_data, similarity_data
+
+
+def load_nli_for_simcse_data(filename, split='train'):
+    nli_data = []
+    with open(filename, 'r') as fp:
+        for record in csv.DictReader(fp, delimiter='\t'):
+            if split == 'test':
+                sent_id = record['id'].lower().strip()
+                nli_data.append((preprocess_string(record['sent0']),
+                                 preprocess_string(record['sent1']),
+                                 preprocess_string(record['hard_neg']),
+                                 sent_id))
+            else:
+                nli_data.append((preprocess_string(record['sent0']),
+                                 preprocess_string(record['sent1']),
+                                 preprocess_string(record['hard_neg'])))
+
+    print(f"Loaded {len(nli_data)} {split} examples from {filename}")
+    return nli_data
