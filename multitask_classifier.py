@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 from datasets import SentenceClassificationDataset, SentencePairDataset, load_multitask_data, load_multitask_test_data, NLIDataset
 
-from evaluation import model_eval_sst, test_model_multitask, model_eval_multitask
+from evaluation import test_model_multitask, model_eval_multitask, model_eval_test_multitask #,model_eval_sst
 
 
 TQDM_DISABLE=False #change?
@@ -97,8 +97,6 @@ class MultitaskBERT(nn.Module):
         (0 - negative, 1- somewhat negative, 2- neutral, 3- somewhat positive, 4- positive)
         Thus, your output should contain 5 logits for each sentence.
         '''
-        # ### TODO
-        # raise NotImplementedError
         fwd = self.forward(input_ids, attention_mask)
         return self.sent_classifier(fwd)
         
@@ -109,7 +107,6 @@ class MultitaskBERT(nn.Module):
         Note that your output should be unnormalized (a logit); it will be passed to the sigmoid function
         during evaluation, and handled as a logit by the appropriate loss function.
         '''
-        ### TODO
         para1_embed = self.forward(input_ids_1, attention_mask_1)
         para2_embed = self.forward(input_ids_2, attention_mask_2)
         paraphrase_embeddings = torch.cat((para1_embed, para2_embed), dim=1) #is this broken?
@@ -122,7 +119,6 @@ class MultitaskBERT(nn.Module):
         Note that your output should be unnormalized (a logit); it will be passed to the sigmoid function
         during evaluation, and handled as a logit by the appropriate loss function.
         '''
-        ### TODO
         sim1_embed = self.forward(input_ids_1, attention_mask_1)
         sim2_embed = self.forward(input_ids_2, attention_mask_2)
         sim_embeddings = torch.cat((sim1_embed, sim2_embed), dim=1)
@@ -187,9 +183,10 @@ def save_model(model, optimizer, args, config, filepath):
     }
     #clobbering filepath!!
     #filepath = "temp.pt"
-    # torch.save(save_info, filepath)
-    # print(f"save the model to {filepath}")
-    print("WE AREN'T SAVING MODELS THESE DAYS - TOO MUCH SPACE")
+    filepath = 'models/' + filepath
+    torch.save(save_info, filepath)
+    print(f"saved the model to {filepath}")
+    # print("WE AREN'T SAVING MODELS THESE DAYS - TOO MUCH SPACE")
 
 
 
@@ -200,15 +197,11 @@ def train_multitask(args):
     # Create the data and its corresponding datasets and dataloader
     sst_train_data, num_labels, para_train_data, sts_train_data, nli_train_data = load_multitask_data(args.nli_train, args.sst_train,args.para_train,args.sts_train, split ='train')
     sst_dev_data, num_labels, para_dev_data, sts_dev_data, nli_dev_data = load_multitask_data(args.nli_dev, args.sst_dev,args.para_dev,args.sts_dev, split ='train')
-
     sst_train_data = SentenceClassificationDataset(sst_train_data, args)
     sst_dev_data = SentenceClassificationDataset(sst_dev_data, args)
-    
     nli_train_data = NLIDataset(nli_train_data, args)
-    
     para_train_data = SentencePairDataset(para_train_data, args)
     para_dev_data = SentencePairDataset(para_dev_data, args)
-    
     sts_train_data = SentencePairDataset(sts_train_data, args)
     sts_dev_data = SentencePairDataset(sts_dev_data, args)
 
@@ -220,13 +213,9 @@ def train_multitask(args):
                                      collate_fn = nli_train_data.collate_fn)
     para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size=args.batch_size, collate_fn = para_train_data.collate_fn)
     para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size, collate_fn = para_train_data.collate_fn)
-
     sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size=args.batch_size, collate_fn = sts_train_data.collate_fn)
     sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size=args.batch_size, collate_fn = sts_dev_data.collate_fn)
-
-    # figure out interleaving
-
-    # quora finetuning dataloader?? 
+    
     # Init model
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
               'num_labels': num_labels,
@@ -240,22 +229,17 @@ def train_multitask(args):
     lr = args.lr
     optimizer = AdamW(model.parameters(), lr=lr)
     best_dev_acc = 0
+    stats = {}
+    best_overall_score = 0.4
 
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
         model.train()
         train_loss = 0
-        num_batches = 0 #???
-        numBatches = args.batch_iters #TODO
-        # there are a little over 3000 batches for the sst task
-
-        
-        # dataloaders = [sst_train_dataloader, nli_train_dataloader]
-        # task_names = ['sst',  'nli']
-
+        num_batches = 0 
+        numBatches = args.batch_iters #should be 750
         dataloaders = [sst_train_dataloader, nli_train_dataloader, para_train_dataloader, sts_train_dataloader]
         task_names = ['sst', 'nli', 'para', 'sts']
-        
         dataloadersDict = {'sst': iter(sst_train_dataloader), 'nli': iter(nli_train_dataloader),
                             'para': iter(para_train_dataloader), 'sts': iter(sts_train_dataloader)}
 
@@ -264,17 +248,9 @@ def train_multitask(args):
             for task_name in task_names:
                 batch = next(dataloadersDict[task_name])
                 #lossFn = lossFnsDict[task_name]
-        # for dataloader, task_name in zip(dataloaders, task_names):
-        #     cnt = 0
-        #     for batch in tqdm(dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
-                # cnt += 1
-                # if cnt % 500 == 0:
-                #     print(cnt)
-                print(task_name)
                 optimizer.zero_grad()
                 if task_name == "sst":
-                    #works well enough
-                    if args.just_simcse:
+                    if args.just_simcse == 'T':
                         continue
                     b_ids, b_mask, b_labels = (batch['token_ids'],
                                         batch['attention_mask'], batch['labels'])
@@ -284,13 +260,11 @@ def train_multitask(args):
                     logits = model.predict_sentiment(b_ids, b_mask)
                     loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / args.batch_size
                 elif task_name == "nli":
-                    # doesn't look like this works
-                    if not args.use_simcse:
+                    if args.use_simcse == 'F':
                         continue 
                     loss = model.predict_nli(batch, device, args)
                 elif task_name == 'para':
-                    # doesn't really work
-                    if args.just_simcse:
+                    if args.just_simcse == 'T':
                         continue
                     tids1 = batch['token_ids_1'].to(device)
                     mask1 = batch['attention_mask_1'].to(device)
@@ -299,17 +273,11 @@ def train_multitask(args):
                     b_labels = batch['labels'].to(device)
                     b_labels = b_labels.to(torch.float32)
                     logits = model.predict_paraphrase(tids1, mask1, tids2, mask2)
-                    #print(logits)
-                    #continue
-                    #loss = F.mse_loss(logits.view(-1), b_labels.view(-1), reduction='sum') / args.batch_size
                     lossFn = torch.nn.BCELoss(reduction='sum')
-                    loss = lossFn(logits.view(-1), b_labels.view(-1))
-                    # print(logits)
-                    # print(b_labels)
-                    # print(loss)
+                    sig = nn.Sigmoid()
+                    loss = lossFn(sig(logits.view(-1)), b_labels.view(-1))
                 elif task_name == 'sts':
-                    #works!
-                    if args.just_simcse:
+                    if args.just_simcse == 'T':
                         continue
                     tids1 = batch['token_ids_1'].to(device)
                     mask1 = batch['attention_mask_1'].to(device)
@@ -319,44 +287,58 @@ def train_multitask(args):
                     b_labels = b_labels.to(torch.float32)
                     logits = model.predict_similarity(tids1, mask1, tids2, mask2)
                     loss = F.mse_loss(logits.view(-1), b_labels.view(-1), reduction='sum') / args.batch_size
-                #optimizer.zero_grad() This goes above right??
                 loss.backward()
                 optimizer.step()
                 train_loss += loss.item()
                 num_batches += 1
 
         train_loss = train_loss / (num_batches)
+        # doubly sample paraphrase lr? higher tau should handle this.
 
         # train_acc, train_f1, *_ = model_eval_sst(sst_train_dataloader, model, device)
         # dev_acc, dev_f1, *_ = model_eval_sst(sst_dev_dataloader, model, device)
-        # we only eval on SST?
-        (paraphrase_accuracy, para_y_pred, para_sent_ids,
-                sentiment_accuracy,sst_y_pred, sst_sent_ids,
-                sts_corr, sts_y_pred, sts_sent_ids) = \
-                model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device)
-        # if dev_acc > best_dev_acc:
-        #     best_dev_acc = dev_acc
-        #     save_model(model, optimizer, args, config, args.filepath)
+        # (paraphrase_accuracy, para_y_pred, para_sent_ids,
+        #         sentiment_accuracy,sst_y_pred, sst_sent_ids,
+        #         sts_corr, sts_y_pred, sts_sent_ids) = \
+        stats = model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device)
+        if stats['overall_score'] > best_overall_score:
+            print("NEW BEST SCORE!!!")
+            best_overall_score = stats['overall_score']
+            save_model(model, optimizer, args, config, 'BEST_MODEL.pt')
 
         #print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
+    if args.save_model == 'T':
+        save_model(model, optimizer, args, config, args.filepath)
 
-    stats = test_model_multitask(args, model, device, False)
+    # writePredictions = args.write_predictions == 'T'
+    # if writePredictions:
+    #     stats = test_model_multitask(args, model, device, evalOnTest = writePredictions, writePreds = writePredictions)
     return model, stats
 
 
-def test_model(args, model):
-    '''We do not use this right now!!'''
+# def test_model(args, model):
+#     '''We do not use this right now!!'''
+#     with torch.no_grad():
+#         device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
+#         saved = torch.load(args.filepath)
+#         config = saved['model_config']
+
+#         model = MultitaskBERT(config)
+#         model.load_state_dict(saved['model'])
+#         model = model.to(device)
+#         print(f"Loaded model to test from {args.filepath}")
+#         return test_model_multitask(args, model, device)
+
+def writePredictions(args):
+    '''Just write predictions, do not train a model at all'''
     with torch.no_grad():
         device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
-        saved = torch.load(args.filepath)
+        saved = torch.load(args.model_loader_filepath)
         config = saved['model_config']
-
         model = MultitaskBERT(config)
         model.load_state_dict(saved['model'])
         model = model.to(device)
-        print(f"Loaded model to test from {args.filepath}")
-
-        return test_model_multitask(args, model, device)
+        return test_model_multitask(args, model, device, evalOnTest = True, writePreds = True)
 
 
 def get_args():
@@ -379,7 +361,7 @@ def get_args():
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--option", type=str,
                         help='pretrain: the BERT parameters are frozen; finetune: BERT parameters are updated',
-                        choices=('pretrain', 'finetune'), default="pretrain")
+                        choices=('pretrain', 'finetune'), default="finetune")
     parser.add_argument("--use_gpu", action='store_true')
 
     parser.add_argument("--sst_dev_out", type=str, default="predictions/sst-dev-output.csv")
@@ -403,16 +385,22 @@ def get_args():
     parser.add_argument('--nli_dev', type=str, default='data/nli_for_simcse-dev.csv')
     parser.add_argument('--nli_test', type=str, default='data/nli_for_simcse-test.csv')
     parser.add_argument('--tau', type=float, default=5e-2) #TODO. Does this default value make any sense?
-    parser.add_argument('--batch_iters', type=int, default=750) 
-    parser.add_argument('--use_simcse', type=bool, default =True)
-    parser.add_argument('--just_simcse', type=bool, default=False)
+    parser.add_argument('--batch_iters', type=int, default=700) 
+    parser.add_argument('--use_simcse', type=str, default='T')
+    parser.add_argument('--just_simcse', type=str, default='F')
+    parser.add_argument('--save_model', type=str, default='F')
+    parser.add_argument('--write_predictions', type=str, default='F')
+    parser.add_argument('--write_predictions_only', type=str, default='F')
+    parser.add_argument('--model_loader_filepath', type=str, default='models/BEST_MODEL.pt')
+
 
     args = parser.parse_args()
     return args
 
-NAME = 'model_summaries.csv'
-STATS = ['lr', 'option', 'dropout_prob', 'epochs', 'paraphrase_detection_acccuracy', 
-         'sentiment_classification_accuracy', 'semantic_textual_similarity_correlation']
+NAME = 'NEWEST_model_summaries.csv'
+STATS = ['lr', 'option', 'dropout_prob', 'epochs', 'just_simcse', 'use_simcse', 
+         'tau', 'paraphrase_detection_acccuracy', 'sentiment_classification_accuracy',
+          'semantic_textual_similarity_correlation', 'overall_score']
 def createDataframe():
     print("CREATING DATAFRAME, CLOBBERING OLD THINGS")
     df = pd.DataFrame(data = [], columns = STATS)
@@ -428,19 +416,50 @@ def saveStats(newData):
     df.to_csv(NAME, index = False)
     return
 
+def stripBadChars(s):
+    s = s.replace('{', '')
+    s = s.replace('}', '')
+    s = s.replace(':', '')
+    s = s.replace(',', '-')
+    s = s.replace(' ', '_')
+    s = s.replace('\'', '')
+    s = s.replace('\"', '')
+    return s
+
+def areTF(strs):
+    return all([s in ['T', 'F'] for s in strs])
+
+def writeSomethingStupid():
+    with open('predictions/newfile.txt', "x") as f:
+        f.write('lolz')
 
 if __name__ == "__main__":
     args = get_args()
     #args.filepath = f'{args.save_model_dir}/{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
     #args.filepath = f'{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
-    #TODO
-    args.filepath = 'temp.pt'
+    #args.filepath = 'temp.pt'
+    if not areTF([args.use_simcse, args.just_simcse, args.save_model, args.write_predictions,
+                  args.write_predictions_only]):
+        raise Exception('bad arg format')
+    if args.write_predictions_only == 'T':
+        writePredictions(args)
+        exit(0)
+    if args.use_simcse == 'F' and args.just_simcse == 'T':
+        raise Exception('bad arg format')
+    hyperparams = {'lr': args.lr, 'option': args.option, 'epochs':args.epochs, 
+                    'dropout_prob': args.hidden_dropout_prob, 'just_simcse': args.just_simcse,
+                    'use_simcse': args.use_simcse, 'tau': args.tau}
     seed_everything(args.seed)  # fix the seed for reproducibility
+    args.prefix = stripBadChars(str(hyperparams))
+    args.filepath = 'model_' + args.prefix + '.pt'
     model, stats = train_multitask(args)
     print('saving stats')
-    hyperparams = {'lr': args.lr, 'option': args.option, 'epochs':args.epochs, 
-                    'dropout_prob': args.hidden_dropout_prob}
+    
+
+    
     #stats = test_model(args, model)
     hyperparams.update(stats)
     saveStats(hyperparams)
+    
+    
 

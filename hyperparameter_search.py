@@ -3,14 +3,15 @@ import os
 
 lrs = ['0.8e-5', '1e-5', '1.2e-5']
 #dropout_rates = ['0.25', '0.3', '0.35']
-dropout_rates = ['0.3']
+dropout_rates = ['0.25', '0.35']
 directory = "models"
-epoch_nums = ['5', '10', '20', '50']
+#epoch_nums = ['5', '10', '20', '50']
+epoch_nums = ['3', '6']
 option = 'finetune'
 bert_hidden_sizes = ['768'] # '1536']#['512', '768', '1152']
-taus = ['5e-2', '1e-1'] #look this up!!
-batch_iters = '750' #can't be more than 755
-max_tests = 5 #fix!!!
+taus = ['1e-1', '5e-1'] #look this up!!
+batch_iters = '700' #can't be more than 755
+max_tests = 10 #fix!!!
 
 
 cnt = 0
@@ -19,7 +20,7 @@ for epn in epoch_nums:
         for lr in lrs:
             for bhs in bert_hidden_sizes:
                 for tau in taus:
-                    for use_sim in ['True', 'False']:
+                    for use_sim in ['T']: #lolz
                         if cnt < max_tests:
                             if use_sim == False and tau != taus[0]:
                                 continue
