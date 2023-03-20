@@ -236,7 +236,6 @@ def model_eval_test_multitask(sentiment_dataloader,
 
 def test_model_multitask(args, model, device, evalOnTest = True, writePreds = True):
     model.eval()  # switch to eval model, will turn off randomness like dropout
-
     with torch.no_grad():
 
         if evalOnTest:
@@ -281,51 +280,48 @@ def test_model_multitask(args, model, device, evalOnTest = True, writePreds = Tr
         print(f"dev paraphrase acc :: {dev_paraphrase_accuracy :.3f}")
 
         if writePreds:
-            with open('predictions/' + args.prefix + args.sst_dev_out, "x") as f:
+            with open('predictions/' + args.prefix + args.sst_dev_out, "w") as f:
                 f.write(f"id \t Predicted_Sentiment \n")
                 for p, s in zip(dev_sst_sent_ids, dev_sst_y_pred):
                     f.write(f"{p} , {s} \n")
 
             
-            with open('predictions/' + args.prefix + args.sts_dev_out, "x") as f:
+            with open('predictions/' + args.prefix + args.sts_dev_out, "w") as f:
                 f.write(f"id \t Predicted_Similiary \n")
                 for p, s in zip(dev_sts_sent_ids, dev_sts_y_pred):
                     f.write(f"{p} , {s} \n")
 
             
-            with open('predictions/' + args.prefix + args.para_dev_out, "x") as f:
+            with open('predictions/' + args.prefix + args.para_dev_out, "w") as f:
                 f.write(f"id \t Predicted_Is_Paraphrase \n")
                 for p, s in zip(dev_para_sent_ids, dev_para_y_pred):
                     f.write(f"{p} , {s} \n")
 
-        if useTestSet and writePreds:
-            with open('predictions/' + args.prefix + args.sst_test_out, "x") as f:
+        if evalOnTest and writePreds:
+            with open('predictions/' + args.prefix + args.sst_test_out, "w") as f:
                 f.write(f"id \t Predicted_Sentiment \n")
                 for p, s in zip(test_sst_sent_ids, test_sst_y_pred):
                     f.write(f"{p} , {s} \n")
 
-            with open('predictions/' + args.prefix + args.para_test_out, "x") as f:
+            with open('predictions/' + args.prefix + args.para_test_out, "w") as f:
                 f.write(f"id \t Predicted_Is_Paraphrase \n")
                 for p, s in zip(test_para_sent_ids, test_para_y_pred):
                     f.write(f"{p} , {s} \n")
 
-            with open('predictions/' + args.prefix + args.sts_test_out, "x") as f:
+            with open('predictions/' + args.prefix + args.sts_test_out, "w") as f:
                 f.write(f"id \t Predicted_Similiary \n")
                 for p, s in zip(test_sts_sent_ids, test_sts_y_pred):
                     f.write(f"{p} , {s} \n")
 
-        ret = addOverallScore({'sentiment_classification_accuracy': sentiment_accuracy, 
-                    'paraphrase_detection_acccuracy': paraphrase_accuracy,
-                    'semantic_textual_similarity_correlation': sts_corr})
+        ret = addOverallScore({'sentiment_classification_accuracy': dev_sentiment_accuracy, 
+                    'paraphrase_detection_acccuracy': dev_paraphrase_accuracy,
+                    'semantic_textual_similarity_correlation': dev_sts_corr})
         score = ret['overall_score']
-        print(f'Sentiment classification accuracy: {sentiment_accuracy:.3f}')
-        print(f'Paraphrase detection accuracy: {paraphrase_accuracy:.3f}')
-        print(f'Semantic Textual Similarity correlation: {sts_corr:.3f}')
         print(f'Overall score: {score:.3f}')
     return ret
 
-def eval_writePredictions(args, model, device):
-    model.eval()
+# def eval_writePredictions(args, model, device):
+#     model.eval()
 
 
 def addOverallScore(d):

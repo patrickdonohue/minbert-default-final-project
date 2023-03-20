@@ -375,13 +375,14 @@ def load_nli_for_simcse_data(filename, split='train'):
     nli_data = []
     with open(filename, 'r') as fp:
         for record in csv.DictReader(fp, delimiter=','):
-            if False:
-            #if split == 'test':
-                sent_id = record['id'].lower().strip()
-                nli_data.append((preprocess_string(record['sent0']),
-                                 preprocess_string(record['sent1']),
-                                 preprocess_string(record['hard_neg']),
-                                 sent_id))
+            #if False:
+            if split == 'test' or split =='dev':
+                pass
+                # sent_id = record['id'].lower().strip()
+                # nli_data.append((preprocess_string(record['sent0']),
+                #                  preprocess_string(record['sent1']),
+                #                  preprocess_string(record['hard_neg']),
+                #                  sent_id))
             else:
                 nli_data.append((preprocess_string(record['sent0']),
                                  preprocess_string(record['sent1']),

@@ -167,6 +167,12 @@ class MultitaskBERT(nn.Module):
         loss = lossfn(loss, zeros) / args.batch_size #, reduction = 'sum')#is this last division OK?
         return loss
 
+    # def simcseUnsupervised(self,batch,device,args):
+    '''I can't be asked to do this.'''
+    #     token_ids = batch['token_ids'].to(device)
+    #     attention_mask = batch['attention_mask'].to(device)
+
+
     
 
 
@@ -225,12 +231,17 @@ def train_multitask(args):
 
     config = SimpleNamespace(**config)
     model = MultitaskBERT(config)
+    if args.option == 'pretrain' and args.model_loader_filepath != "BERT":
+        print('using pretrained weights from ' + args.model_loader_filepath)
+        saved = torch.load(args.model_loader_filepath)
+        config = saved['model_config']
+        model.load_state_dict(saved['model'])
     model = model.to(device)
     lr = args.lr
     optimizer = AdamW(model.parameters(), lr=lr)
     best_dev_acc = 0
     stats = {}
-    best_overall_score = 0.4
+    best_overall_score = 0.507
 
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
@@ -260,7 +271,7 @@ def train_multitask(args):
                     logits = model.predict_sentiment(b_ids, b_mask)
                     loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / args.batch_size
                 elif task_name == "nli":
-                    if args.use_simcse == 'F':
+                    if args.use_simcse == 'F' or args.option == 'pretrain':
                         continue 
                     loss = model.predict_nli(batch, device, args)
                 elif task_name == 'para':
@@ -331,6 +342,9 @@ def train_multitask(args):
 
 def writePredictions(args):
     '''Just write predictions, do not train a model at all'''
+    # print(args.lr)
+    # print(args.prefix)
+    # exit(0)
     with torch.no_grad():
         device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
         saved = torch.load(args.model_loader_filepath)
@@ -338,7 +352,7 @@ def writePredictions(args):
         model = MultitaskBERT(config)
         model.load_state_dict(saved['model'])
         model = model.to(device)
-        return test_model_multitask(args, model, device, evalOnTest = True, writePreds = True)
+        return test_model_multitask(args, model, device, evalOnTest = False, writePreds = True)
 
 
 def get_args():
@@ -362,16 +376,15 @@ def get_args():
     parser.add_argument("--option", type=str,
                         help='pretrain: the BERT parameters are frozen; finetune: BERT parameters are updated',
                         choices=('pretrain', 'finetune'), default="finetune")
+
+    # do not touch these 7
     parser.add_argument("--use_gpu", action='store_true')
-
-    parser.add_argument("--sst_dev_out", type=str, default="predictions/sst-dev-output.csv")
-    parser.add_argument("--sst_test_out", type=str, default="predictions/sst-test-output.csv")
-
-    parser.add_argument("--para_dev_out", type=str, default="predictions/para-dev-output.csv")
-    parser.add_argument("--para_test_out", type=str, default="predictions/para-test-output.csv")
-
-    parser.add_argument("--sts_dev_out", type=str, default="predictions/sts-dev-output.csv")
-    parser.add_argument("--sts_test_out", type=str, default="predictions/sts-test-output.csv")
+    parser.add_argument("--sst_dev_out", type=str, default="sst-dev-output.csv")
+    parser.add_argument("--sst_test_out", type=str, default="sst-test-output.csv")
+    parser.add_argument("--para_dev_out", type=str, default="para-dev-output.csv")
+    parser.add_argument("--para_test_out", type=str, default="para-test-output.csv")
+    parser.add_argument("--sts_dev_out", type=str, default="sts-dev-output.csv")
+    parser.add_argument("--sts_test_out", type=str, default="sts-test-output.csv")
 
     # hyper parameters
     parser.add_argument("--batch_size", help='sst: 64, cfimdb: 8 can fit a 12GB GPU', type=int, default=8)
@@ -392,6 +405,7 @@ def get_args():
     parser.add_argument('--write_predictions', type=str, default='F')
     parser.add_argument('--write_predictions_only', type=str, default='F')
     parser.add_argument('--model_loader_filepath', type=str, default='models/BEST_MODEL.pt')
+    #parser.add_argument('--load_previous_model_for_finetuning', type=str default='')
 
 
     args = parser.parse_args()
@@ -442,8 +456,15 @@ if __name__ == "__main__":
                   args.write_predictions_only]):
         raise Exception('bad arg format')
     if args.write_predictions_only == 'T':
+        args.prefix = 'BEST_MODEL'
         writePredictions(args)
         exit(0)
+    if args.option == "pretrain":
+        print('make sure you reset hyperparams! Lr should be 1e-3, epochs prob just 1-2')
+        if args.model_loader_filepath == 'BERT':
+            print('using pretrained bert embeddings (instead of already used simcse model')
+
+
     if args.use_simcse == 'F' and args.just_simcse == 'T':
         raise Exception('bad arg format')
     hyperparams = {'lr': args.lr, 'option': args.option, 'epochs':args.epochs, 
@@ -461,5 +482,5 @@ if __name__ == "__main__":
     hyperparams.update(stats)
     saveStats(hyperparams)
     
-    
+    # TODO - write a method to use pretrained Simcse embeddings, and just finetune heads for the three tasks
 
