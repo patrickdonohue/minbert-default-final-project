@@ -74,6 +74,7 @@ class MultitaskBERT(nn.Module):
         ### for constrastive	
         self.margin = 0.05 #hard code fpr now	
         self.cosine_similarity = nn.CosineSimilarity(dim=1)
+        self.simcse_classifier = torch.nn.Linear(BERT_HIDDEN_SIZE, BERT_HIDDEN_SIZE)
 
 
     def forward(self, input_ids, attention_mask):
@@ -164,9 +165,11 @@ class MultitaskBERT(nn.Module):
         token_type_ids3 = batch['token_type_ids3'].to(device)
         attention_mask3 = batch['attention_mask3'].to(device)
         
-        embed1 = self.forward(token_ids1, attention_mask1)
-        embed2 = self.forward(token_ids2, attention_mask2)
-        embed3 = self.forward(token_ids3, attention_mask3)
+        # self.simcse_classifier()
+        embed1 = self.simcse_classifier(self.forward(token_ids1, attention_mask1))
+        embed2 = self.simcse_classifier(self.forward(token_ids2, attention_mask2))
+        embed3 = self.simcse_classifier(self.forward(token_ids3, attention_mask3))
+
         cos_sim12 = self.cosine_similarity(embed1, embed2)
         cos_sim23 = self.cosine_similarity(embed2, embed3)
         cos_sim13 = self.cosine_similarity(embed1, embed3)
@@ -293,6 +296,8 @@ def train_multitask(args):
                     logits = model.predict_sentiment(b_ids, b_mask)
                     loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / args.batch_size
                 elif task_name == "nli":
+                    if not args.use_simcse:
+                        continue 
                     # print('batch')
                     # print(batch)
                     # will send to device later
@@ -401,8 +406,8 @@ def get_args():
     parser.add_argument('--nli_dev', type=str, default='data/nli_for_simcse-dev.csv')
     parser.add_argument('--nli_test', type=str, default='data/nli_for_simcse-test.csv')
     parser.add_argument('--tau', type=float, default=1) #TODO. Does this default value make any sense?
-    parser.add_argument('--batch_iters', type=int, default=1000) #TODO
-
+    parser.add_argument('--batch_iters', type=int, default=750) 
+    parser.add_argument('--use_simcse', type=bool, default =True)
 
     args = parser.parse_args()
     return args
