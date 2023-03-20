@@ -13,12 +13,12 @@ from bert import BertModel
 from optimizer import AdamW
 from tqdm import tqdm
 
-from datasets import SentenceClassificationDataset, SentencePairDataset, load_multitask_data, load_multitask_test_data
+from datasets import SentenceClassificationDataset, SentencePairDataset, load_multitask_data, load_multitask_test_data, NLIDataset
 
 from evaluation import model_eval_sst, test_model_multitask
 
 
-TQDM_DISABLE=True
+TQDM_DISABLE=False #change?
 
 # fix the random seed
 def seed_everything(seed=11711):
@@ -34,6 +34,19 @@ def seed_everything(seed=11711):
 BERT_HIDDEN_SIZE = 768
 N_SENTIMENT_CLASSES = 5
 
+
+# class simcseSupervisedLoss(nn.Module):
+#     def __init__(self):
+#         super(simcseSupervisedLoss, self).__init__()
+
+#     def forward(self, cos_sim12, cos_sim23, cos_sim31, tau):
+#         # print('shapes')
+#         # print(cos_sim12.shape)
+#         # loggednum = torch.logsumexp(cos_sim12 / tau)
+#         # loggeddenom = torch.logsumexp(cos_sim / tau)
+#         num = torch.sum(torch.exp(cos_sim12 / tau))
+#         denom = torch.sum(torch.exp(cos_sim12/tau) + torch.exp(cos_sim31 / tau))
+#         return -torch.log(num/denom)
 
 class MultitaskBERT(nn.Module):
     '''
@@ -98,7 +111,7 @@ class MultitaskBERT(nn.Module):
         ### TODO
         para1_embed = self.forward(input_ids_1, attention_mask_1)
         para2_embed = self.forward(input_ids_2, attention_mask_2)
-        paraphrase_embeddings = torch.cat((para1_embed, para2_embed), dim=1)
+        paraphrase_embeddings = torch.cat((para1_embed, para2_embed), dim=1) #is this broken?
         paraphrase_logits = self.paraphrase_classifier(paraphrase_embeddings)
         return paraphrase_logits
 
@@ -116,24 +129,63 @@ class MultitaskBERT(nn.Module):
         sim_logits = self.sim_classifier(sim_embeddings)
         return sim_logits
 
-    def predict_nli(self, input_ids, attention_mask):	
-        '''Given a batch of pairs of sentences, outputs a single logit corresponding to how similar they are.	
-        Note that your output should be unnormalized (a logit); it will be passed to the sigmoid function	
-        during evaluation, and handled as a logit by the appropriate loss function.	
-        '''	
-        ### TODO	
-        print("input_ids: ", input_ids.shape)
-        print("attn_mask: ", attention_mask.shape)
-        sim1_embed = self.forward(input_ids, attention_mask)	
-        sim2_embed = self.forward(input_ids, attention_mask)
-        sim3_embed = self.forward(input_ids, attention_mask)	
-        # embed = batch_size x hidden_dim	
-        cos_sim_1_2 = self.cosine_similarity(sim1_embed.unsqueeze(1), sim2_embed.unsqueeze(0)) # [b, 1, h] and [1, b, h] -> outputs [b, h]	
-        cos_sim_1_3 = self.cosine_similarity(sim1_embed.unsqueeze(1), sim3_embed.unsqueeze(0))	
-        cos_sim = torch.cat([cos_sim_1_2, cos_sim_1_3], 1)	
-        labels = torch.arange(cos_sim.size(0)) # [0,1,2..., batch_size - 1]	
-        return cos_sim
+    # def predict_nli_pat(self, input_ids, attention_mask):	
+    #     '''Given a batch of triplets of sentences, outputs -- ... Do we even need to implement this??
+    #     TODO
+    #     '''	
+    #     ### TODO	
+    #     print("input_ids: ", input_ids.shape)
+    #     print("attn_mask: ", attention_mask.shape)
+    #     sim1_embed = self.forward(input_ids, attention_mask)	
+    #     sim2_embed = self.forward(input_ids, attention_mask)
+    #     sim3_embed = self.forward(input_ids, attention_mask)	
+    #     # embed = batch_size x hidden_dim	
+    #     cos_sim_1_2 = self.cosine_similarity(sim1_embed.unsqueeze(1), sim2_embed.unsqueeze(0)) # [b, 1, h] and [1, b, h] -> outputs [b, h]	
+    #     cos_sim_1_3 = self.cosine_similarity(sim1_embed.unsqueeze(1), sim3_embed.unsqueeze(0))	
+    #     cos_sim = torch.cat([cos_sim_1_2, cos_sim_1_3], 1)	
+    #     labels = torch.arange(cos_sim.size(0)) # [0,1,2..., batch_size - 1]	
+    #     return cos_sim
 
+    def predict_nli(self, batch, device, args):
+        '''Given a batch of triplets of sentences, outputs a loss directly. 
+            Doesn't need to predict diddly squat, because we don't have labels.
+            Also this isn't a task in and of itself, it's just a training method.
+        '''
+        # (token_ids1, token_type_ids1, attention_mask1,
+        # token_ids2, token_type_ids2, attention_mask2,
+        # token_ids3, token_type_ids3, attention_mask3) = batch
+        token_ids1 = batch['token_ids1'].to(device)
+        token_type_ids1 = batch['token_type_ids1'].to(device)
+        attention_mask1 = batch['attention_mask1'].to(device)
+        token_ids2 = batch['token_ids2'].to(device)
+        token_type_ids2 = batch['token_type_ids2'].to(device)
+        attention_mask2 = batch['attention_mask2'].to(device)
+        token_ids3 = batch['token_ids3'].to(device)
+        token_type_ids3 = batch['token_type_ids3'].to(device)
+        attention_mask3 = batch['attention_mask3'].to(device)
+        
+        embed1 = self.forward(token_ids1, attention_mask1)
+        embed2 = self.forward(token_ids2, attention_mask2)
+        embed3 = self.forward(token_ids3, attention_mask3)
+        cos_sim12 = self.cosine_similarity(embed1, embed2)
+        cos_sim23 = self.cosine_similarity(embed2, embed3)
+        cos_sim13 = self.cosine_similarity(embed1, embed3)
+        cos_sim31 = self.cosine_similarity(embed3, embed1)
+        #assert(torch.all(torch.eq(cos_sim13, cos_sim31)))
+        #lossFn = simcseSupervisedLoss()
+        #loss = lossFn.forward(cos_sim12, cos_sim23, cos_sim31, args.tau)
+
+        tau = args.tau
+        num = torch.exp(cos_sim12 / tau)
+        denom = torch.sum(torch.exp(cos_sim12/tau) + torch.exp(cos_sim31 / tau))
+        loss = -torch.log(num/denom)
+        #loss = torch.ones(len(cos_sim12)).to(device)
+        lossfn = torch.nn.L1Loss()
+        zeros = torch.zeros(len(cos_sim12)).to(device)
+        loss = lossfn(loss, zeros) / args.batch_size #is this last division OK?
+        return loss
+
+    
 
 
 
@@ -147,10 +199,12 @@ def save_model(model, optimizer, args, config, filepath):
         'numpy_rng': np.random.get_state(),
         'torch_rng': torch.random.get_rng_state(),
     }
-
+    #clobbering filepath!!
+    #filepath = "temp.pt"
     # torch.save(save_info, filepath)
     # print(f"save the model to {filepath}")
     print("WE AREN'T SAVING MODELS THESE DAYS - TOO MUCH SPACE")
+
 
 
 ## Currently only trains on sst dataset
@@ -158,19 +212,35 @@ def train_multitask(args):
     device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
     # Load data 
     # Create the data and its corresponding datasets and dataloader
-    sst_train_data, num_labels,para_train_data, sts_train_data, nli_train_data = load_multitask_data(args.nli_train, args.sst_train,args.para_train,args.sts_train, split ='train')
-    sst_dev_data, num_labels,para_dev_data, sts_dev_data, nli_dev_data = load_multitask_data(args.nli_dev, args.sst_dev,args.para_dev,args.sts_dev, split ='train')
+    sst_train_data, num_labels, para_train_data, sts_train_data, nli_train_data = load_multitask_data(args.nli_train, args.sst_train,args.para_train,args.sts_train, split ='train')
+    sst_dev_data, num_labels, para_dev_data, sts_dev_data, nli_dev_data = load_multitask_data(args.nli_dev, args.sst_dev,args.para_dev,args.sts_dev, split ='train')
 
     sst_train_data = SentenceClassificationDataset(sst_train_data, args)
     sst_dev_data = SentenceClassificationDataset(sst_dev_data, args)
+    
+    nli_train_data = NLIDataset(nli_train_data, args)
+    
+    para_train_data = SentencePairDataset(para_train_data, args)
+    para_dev_data = SentencePairDataset(para_dev_data, args)
+    
+    sts_train_data = SentencePairDataset(sts_train_data, args)
+    sts_dev_data = SentencePairDataset(sts_dev_data, args)
 
     sst_train_dataloader = DataLoader(sst_train_data, shuffle=True, batch_size=args.batch_size,
                                       collate_fn=sst_train_data.collate_fn)
     sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size,
                                     collate_fn=sst_dev_data.collate_fn)
+    nli_train_dataloader = DataLoader(nli_train_data, shuffle=True, batch_size=args.batch_size,
+                                     collate_fn = nli_train_data.collate_fn)
+    para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size=args.batch_size, collate_fn = para_train_data.collate_fn)
+    para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size, collate_fn = para_train_data.collate_fn)
 
-    nli_train_dataloader = DataLoader(nli_train_data, shuffle=False, batch_size=args.batch_size)
+    sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size=args.batch_size, collate_fn = sts_train_data.collate_fn)
+    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size=args.batch_size, collate_fn = sts_dev_data.collate_fn)
 
+    # figure out interleaving
+
+    # quora finetuning dataloader?? 
     # Init model
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
               'num_labels': num_labels,
@@ -179,10 +249,8 @@ def train_multitask(args):
               'option': args.option}
 
     config = SimpleNamespace(**config)
-
     model = MultitaskBERT(config)
     model = model.to(device)
-
     lr = args.lr
     optimizer = AdamW(model.parameters(), lr=lr)
     best_dev_acc = 0
@@ -191,42 +259,71 @@ def train_multitask(args):
     for epoch in range(args.epochs):
         model.train()
         train_loss = 0
-        num_batches = 0
+        num_batches = 0 #???
+        numBatches = args.batch_iters #TODO
+        # there are a little over 3000 batches for the sst task
 
-        #dataloaders = [sst_train_dataloader, sts_train_dataloader, nli_train_dataloader]
-        dataloaders = [sst_train_dataloader]
-        for dataloader, task_name in zip(dataloaders, ['sst', 'sts', 'nli']):
-            for batch in tqdm(dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
-                
-                print(batch)
+        
+        # dataloaders = [sst_train_dataloader, nli_train_dataloader]
+        # task_names = ['sst',  'nli']
 
-                # b_ids = b_ids.to(device)
-                # b_mask = b_mask.to(device)
-                # b_labels = b_labels.to(device)
-
-                # optimizer.zero_grad()
+        dataloaders = [sst_train_dataloader, nli_train_dataloader, para_train_dataloader, sts_train_dataloader]
+        task_names = ['sst', 'nli', 'para', 'sts']
+        
+        dataloadersDict = {'sst': iter(sst_train_dataloader), 'nli': iter(nli_train_dataloader),
+                            'para': iter(para_train_dataloader), 'sts': iter(sts_train_dataloader)}
+        for batchI in tqdm(range(numBatches), desc=f'train-{epoch}', disable=TQDM_DISABLE):
+            for task_name in task_names:
+                batch = next(dataloadersDict[task_name])
+        # for dataloader, task_name in zip(dataloaders, task_names):
+        #     cnt = 0
+        #     for batch in tqdm(dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
+                # cnt += 1
+                # if cnt % 500 == 0:
+                #     print(cnt)
+                optimizer.zero_grad()
                 if task_name == "sst":
+                    ## TODO - get rid of continue
+                    #continue
                     b_ids, b_mask, b_labels = (batch['token_ids'],
                                         batch['attention_mask'], batch['labels'])
+                    b_ids = b_ids.to(device)
+                    b_mask = b_mask.to(device)
+                    b_labels = b_labels.to(device)
                     logits = model.predict_sentiment(b_ids, b_mask)
                     loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / args.batch_size
                 elif task_name == "nli":
-                    loss = 0
-                    for x, x_plus, x_neg in batch:
-                        b_ids, b_mask, b_labels = (x['token_ids'],
-                                        x_plus['attention_mask'], x_neg['labels'])
-
-                        b_ids = b_ids.to(device)
-                        b_mask = b_mask.to(device)
-                        b_labels = b_labels.to(device)
-
-                        cos_sim = model.predict_nli(b_ids, b_mask)
-                        loss += F.cross_entropy(cos_sim, b_labels.view(-1), reduction='sum') / args.batch_size
-
-                optimizer.zero_grad()
+                    # print('batch')
+                    # print(batch)
+                    # will send to device later
+                    loss = model.predict_nli(batch, device, args)
+                elif task_name == 'para':
+                    tids1 = batch['token_ids_1'].to(device)
+                    #'token_type_ids_1']
+                    mask1 = batch['attention_mask_1'].to(device)
+                    tids2 = batch['token_ids_2'].to(device)
+                    #'token_type_ids_2']
+                    mask2 = batch['attention_mask_2'].to(device)
+                    b_labels = batch['labels'].to(device)
+                    b_labels = b_labels.to(torch.float32)
+                    #'sent_ids']
+                    logits = model.predict_paraphrase(tids1, mask1, tids2, mask2)
+                    loss = F.mse_loss(logits.view(-1), b_labels.view(-1), reduction='sum') / args.batch_size
+                elif task_name == 'sts':
+                    tids1 = batch['token_ids_1'].to(device)
+                    #'token_type_ids_1']
+                    mask1 = batch['attention_mask_1'].to(device)
+                    tids2 = batch['token_ids_2'].to(device)
+                    #'token_type_ids_2']
+                    mask2 = batch['attention_mask_2'].to(device)
+                    #'sent_ids']
+                    b_labels = batch['labels'].to(device)
+                    b_labels = b_labels.to(torch.float32)
+                    logits = model.predict_similarity(tids1, mask1, tids2, mask2)
+                    loss = F.mse_loss(logits.view(-1), b_labels.view(-1), reduction='sum') / args.batch_size
+                #optimizer.zero_grad() This goes above right??
                 loss.backward()
                 optimizer.step()
-
                 train_loss += loss.item()
                 num_batches += 1
 
@@ -234,6 +331,7 @@ def train_multitask(args):
 
         train_acc, train_f1, *_ = model_eval_sst(sst_train_dataloader, model, device)
         dev_acc, dev_f1, *_ = model_eval_sst(sst_dev_dataloader, model, device)
+        # we only eval on SST?
 
         if dev_acc > best_dev_acc:
             best_dev_acc = dev_acc
@@ -242,18 +340,19 @@ def train_multitask(args):
         print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
 
     test_model_multitask(args, model, device)
+    return model
 
 
-def test_model(args):
+def test_model(args, model):
     with torch.no_grad():
         device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
         saved = torch.load(args.filepath)
         config = saved['model_config']
 
-        model = MultitaskBERT(config)
-        model.load_state_dict(saved['model'])
-        model = model.to(device)
-        print(f"Loaded model to test from {args.filepath}")
+        #model = MultitaskBERT(config)
+        #model.load_state_dict(saved['model'])
+        #model = model.to(device)
+        #print(f"Loaded model to test from {args.filepath}")
 
         return test_model_multitask(args, model, device)
 
@@ -298,9 +397,11 @@ def get_args():
     parser.add_argument("--save_model_dir", type=str, default = "models")
 
     ## for SimCSE
-    parser.add_argument('--nli_train', type=str, default='data/nli_for_simcse-train.csv')
+    parser.add_argument('--nli_train', type=str, default='data/nli_for_simcse-dev.csv') #TODO - hacked to make this smaller!!
     parser.add_argument('--nli_dev', type=str, default='data/nli_for_simcse-dev.csv')
     parser.add_argument('--nli_test', type=str, default='data/nli_for_simcse-test.csv')
+    parser.add_argument('--tau', type=float, default=1) #TODO. Does this default value make any sense?
+    parser.add_argument('--batch_iters', type=int, default=1000) #TODO
 
 
     args = parser.parse_args()
@@ -313,7 +414,6 @@ def createDataframe():
     print("CREATING DATAFRAME, CLOBBERING OLD THINGS")
     df = pd.DataFrame(data = [], columns = STATS)
     df.to_csv(NAME, index = False)
-    print(df)
     return
 
 def saveStats(newData):
@@ -323,19 +423,20 @@ def saveStats(newData):
     df = pd.read_csv(NAME)
     df = df.append(newData, ignore_index = True)
     df.to_csv(NAME, index = False)
-    print(df)
     return
 
 
 if __name__ == "__main__":
     args = get_args()
-    args.filepath = f'{args.save_model_dir}/{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
+    #args.filepath = f'{args.save_model_dir}/{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
     #args.filepath = f'{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
+    #TODO
+    args.filepath = 'temp.pt'
     seed_everything(args.seed)  # fix the seed for reproducibility
-    train_multitask(args)
+    model = train_multitask(args)
     hyperparams = {'lr': args.lr, 'option': args.option, 'epochs':args.epochs, 
                     'dropout_prob': args.hidden_dropout_prob}
-    stats = test_model(args)
+    stats = test_model(args, model)
     hyperparams.update(stats)
     saveStats(hyperparams)
 
