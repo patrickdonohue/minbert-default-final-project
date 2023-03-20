@@ -21,6 +21,8 @@ for epn in epoch_nums:
                 for tau in taus:
                     for use_sim in ['True', 'False']:
                         if cnt < max_tests:
+                            if use_sim == False and tau != taus[0]:
+                                continue
                             cmd = "python3 multitask_classifier.py --use_gpu --lr " + lr
                             cmd += " --hidden_dropout_prob " + dr
                             cmd += " --save_model_dir " + directory

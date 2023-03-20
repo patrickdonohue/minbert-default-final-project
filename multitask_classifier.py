@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 from datasets import SentenceClassificationDataset, SentencePairDataset, load_multitask_data, load_multitask_test_data, NLIDataset
 
-from evaluation import model_eval_sst, test_model_multitask
+from evaluation import model_eval_sst, test_model_multitask, model_eval_multitask
 
 
 TQDM_DISABLE=False #change?
@@ -130,24 +130,7 @@ class MultitaskBERT(nn.Module):
         sim_logits = self.sim_classifier(sim_embeddings)
         return sim_logits
 
-    # def predict_nli_pat(self, input_ids, attention_mask):	
-    #     '''Given a batch of triplets of sentences, outputs -- ... Do we even need to implement this??
-    #     TODO
-    #     '''	
-    #     ### TODO	
-    #     print("input_ids: ", input_ids.shape)
-    #     print("attn_mask: ", attention_mask.shape)
-    #     sim1_embed = self.forward(input_ids, attention_mask)	
-    #     sim2_embed = self.forward(input_ids, attention_mask)
-    #     sim3_embed = self.forward(input_ids, attention_mask)	
-    #     # embed = batch_size x hidden_dim	
-    #     cos_sim_1_2 = self.cosine_similarity(sim1_embed.unsqueeze(1), sim2_embed.unsqueeze(0)) # [b, 1, h] and [1, b, h] -> outputs [b, h]	
-    #     cos_sim_1_3 = self.cosine_similarity(sim1_embed.unsqueeze(1), sim3_embed.unsqueeze(0))	
-    #     cos_sim = torch.cat([cos_sim_1_2, cos_sim_1_3], 1)	
-    #     labels = torch.arange(cos_sim.size(0)) # [0,1,2..., batch_size - 1]	
-    #     return cos_sim
-
-    def predict_nli(self, batch, device, args):
+    def predict_nli(self, batch, device, args):#, lossFn):
         '''Given a batch of triplets of sentences, outputs a loss directly. 
             Doesn't need to predict diddly squat, because we don't have labels.
             Also this isn't a task in and of itself, it's just a training method.
@@ -173,19 +156,19 @@ class MultitaskBERT(nn.Module):
         cos_sim12 = self.cosine_similarity(embed1, embed2)
         cos_sim23 = self.cosine_similarity(embed2, embed3)
         cos_sim13 = self.cosine_similarity(embed1, embed3)
-        cos_sim31 = self.cosine_similarity(embed3, embed1)
+        #cos_sim31 = self.cosine_similarity(embed3, embed1)
         #assert(torch.all(torch.eq(cos_sim13, cos_sim31)))
         #lossFn = simcseSupervisedLoss()
         #loss = lossFn.forward(cos_sim12, cos_sim23, cos_sim31, args.tau)
 
         tau = args.tau
         num = torch.exp(cos_sim12 / tau)
-        denom = torch.sum(torch.exp(cos_sim12/tau) + torch.exp(cos_sim31 / tau))
+        denom = torch.sum(torch.exp(cos_sim12/tau) + torch.exp(cos_sim13 / tau))
         loss = -torch.log(num/denom)
         #loss = torch.ones(len(cos_sim12)).to(device)
         lossfn = torch.nn.L1Loss()
         zeros = torch.zeros(len(cos_sim12)).to(device)
-        loss = lossfn(loss, zeros) / args.batch_size #is this last division OK?
+        loss = lossfn(loss, zeros) / args.batch_size #, reduction = 'sum')#is this last division OK?
         return loss
 
     
@@ -275,19 +258,24 @@ def train_multitask(args):
         
         dataloadersDict = {'sst': iter(sst_train_dataloader), 'nli': iter(nli_train_dataloader),
                             'para': iter(para_train_dataloader), 'sts': iter(sts_train_dataloader)}
+
+        #lossFnsDict = {'sst': F.cross_entropy, 'nli': torch.nn.L1Loss, 'para': torch.nn.BCELoss, 'sts':F.mse_loss}
         for batchI in tqdm(range(numBatches), desc=f'train-{epoch}', disable=TQDM_DISABLE):
             for task_name in task_names:
                 batch = next(dataloadersDict[task_name])
+                #lossFn = lossFnsDict[task_name]
         # for dataloader, task_name in zip(dataloaders, task_names):
         #     cnt = 0
         #     for batch in tqdm(dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
                 # cnt += 1
                 # if cnt % 500 == 0:
                 #     print(cnt)
+                print(task_name)
                 optimizer.zero_grad()
                 if task_name == "sst":
-                    ## TODO - get rid of continue
-                    #continue
+                    #works well enough
+                    if args.just_simcse:
+                        continue
                     b_ids, b_mask, b_labels = (batch['token_ids'],
                                         batch['attention_mask'], batch['labels'])
                     b_ids = b_ids.to(device)
@@ -296,32 +284,37 @@ def train_multitask(args):
                     logits = model.predict_sentiment(b_ids, b_mask)
                     loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / args.batch_size
                 elif task_name == "nli":
+                    # doesn't look like this works
                     if not args.use_simcse:
                         continue 
-                    # print('batch')
-                    # print(batch)
-                    # will send to device later
                     loss = model.predict_nli(batch, device, args)
                 elif task_name == 'para':
+                    # doesn't really work
+                    if args.just_simcse:
+                        continue
                     tids1 = batch['token_ids_1'].to(device)
-                    #'token_type_ids_1']
                     mask1 = batch['attention_mask_1'].to(device)
                     tids2 = batch['token_ids_2'].to(device)
-                    #'token_type_ids_2']
                     mask2 = batch['attention_mask_2'].to(device)
                     b_labels = batch['labels'].to(device)
                     b_labels = b_labels.to(torch.float32)
-                    #'sent_ids']
                     logits = model.predict_paraphrase(tids1, mask1, tids2, mask2)
-                    loss = F.mse_loss(logits.view(-1), b_labels.view(-1), reduction='sum') / args.batch_size
+                    #print(logits)
+                    #continue
+                    #loss = F.mse_loss(logits.view(-1), b_labels.view(-1), reduction='sum') / args.batch_size
+                    lossFn = torch.nn.BCELoss(reduction='sum')
+                    loss = lossFn(logits.view(-1), b_labels.view(-1))
+                    # print(logits)
+                    # print(b_labels)
+                    # print(loss)
                 elif task_name == 'sts':
+                    #works!
+                    if args.just_simcse:
+                        continue
                     tids1 = batch['token_ids_1'].to(device)
-                    #'token_type_ids_1']
                     mask1 = batch['attention_mask_1'].to(device)
                     tids2 = batch['token_ids_2'].to(device)
-                    #'token_type_ids_2']
                     mask2 = batch['attention_mask_2'].to(device)
-                    #'sent_ids']
                     b_labels = batch['labels'].to(device)
                     b_labels = b_labels.to(torch.float32)
                     logits = model.predict_similarity(tids1, mask1, tids2, mask2)
@@ -334,30 +327,34 @@ def train_multitask(args):
 
         train_loss = train_loss / (num_batches)
 
-        train_acc, train_f1, *_ = model_eval_sst(sst_train_dataloader, model, device)
-        dev_acc, dev_f1, *_ = model_eval_sst(sst_dev_dataloader, model, device)
+        # train_acc, train_f1, *_ = model_eval_sst(sst_train_dataloader, model, device)
+        # dev_acc, dev_f1, *_ = model_eval_sst(sst_dev_dataloader, model, device)
         # we only eval on SST?
+        (paraphrase_accuracy, para_y_pred, para_sent_ids,
+                sentiment_accuracy,sst_y_pred, sst_sent_ids,
+                sts_corr, sts_y_pred, sts_sent_ids) = \
+                model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device)
+        # if dev_acc > best_dev_acc:
+        #     best_dev_acc = dev_acc
+        #     save_model(model, optimizer, args, config, args.filepath)
 
-        if dev_acc > best_dev_acc:
-            best_dev_acc = dev_acc
-            save_model(model, optimizer, args, config, args.filepath)
+        #print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
 
-        print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
-
-    test_model_multitask(args, model, device)
-    return model
+    stats = test_model_multitask(args, model, device, False)
+    return model, stats
 
 
 def test_model(args, model):
+    '''We do not use this right now!!'''
     with torch.no_grad():
         device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
         saved = torch.load(args.filepath)
         config = saved['model_config']
 
-        #model = MultitaskBERT(config)
-        #model.load_state_dict(saved['model'])
-        #model = model.to(device)
-        #print(f"Loaded model to test from {args.filepath}")
+        model = MultitaskBERT(config)
+        model.load_state_dict(saved['model'])
+        model = model.to(device)
+        print(f"Loaded model to test from {args.filepath}")
 
         return test_model_multitask(args, model, device)
 
@@ -402,12 +399,13 @@ def get_args():
     parser.add_argument("--save_model_dir", type=str, default = "models")
 
     ## for SimCSE
-    parser.add_argument('--nli_train', type=str, default='data/nli_for_simcse-dev.csv') #TODO - hacked to make this smaller!!
+    parser.add_argument('--nli_train', type=str, default='data/nli_for_simcse-train.csv')
     parser.add_argument('--nli_dev', type=str, default='data/nli_for_simcse-dev.csv')
     parser.add_argument('--nli_test', type=str, default='data/nli_for_simcse-test.csv')
-    parser.add_argument('--tau', type=float, default=1) #TODO. Does this default value make any sense?
+    parser.add_argument('--tau', type=float, default=5e-2) #TODO. Does this default value make any sense?
     parser.add_argument('--batch_iters', type=int, default=750) 
     parser.add_argument('--use_simcse', type=bool, default =True)
+    parser.add_argument('--just_simcse', type=bool, default=False)
 
     args = parser.parse_args()
     return args
@@ -438,10 +436,11 @@ if __name__ == "__main__":
     #TODO
     args.filepath = 'temp.pt'
     seed_everything(args.seed)  # fix the seed for reproducibility
-    model = train_multitask(args)
+    model, stats = train_multitask(args)
+    print('saving stats')
     hyperparams = {'lr': args.lr, 'option': args.option, 'epochs':args.epochs, 
                     'dropout_prob': args.hidden_dropout_prob}
-    stats = test_model(args, model)
+    #stats = test_model(args, model)
     hyperparams.update(stats)
     saveStats(hyperparams)
 

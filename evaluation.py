@@ -226,64 +226,65 @@ def model_eval_test_multitask(sentiment_dataloader,
                 sts_y_pred, sts_sent_ids)
 
 
-def test_model_multitask(args, model, device):
+def test_model_multitask(args, model, device, useTestSet = True):
+    if useTestSet:
         sst_test_data, num_labels,para_test_data, sts_test_data, nli_test_data = \
             load_multitask_data(args.nli_test, args.sst_test,args.para_test, args.sts_test, split='test')
-
-        sst_dev_data, num_labels,para_dev_data, sts_dev_data, nli_dev_data = \
-            load_multitask_data(args.nli_dev, args.sst_dev,args.para_dev,args.sts_dev,split='dev')
-
         sst_test_data = SentenceClassificationTestDataset(sst_test_data, args)
-        sst_dev_data = SentenceClassificationDataset(sst_dev_data, args)
-
         sst_test_dataloader = DataLoader(sst_test_data, shuffle=True, batch_size=args.batch_size,
                                          collate_fn=sst_test_data.collate_fn)
-        sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size,
-                                        collate_fn=sst_dev_data.collate_fn)
-
         para_test_data = SentencePairTestDataset(para_test_data, args)
-        para_dev_data = SentencePairDataset(para_dev_data, args) 
-
         para_test_dataloader = DataLoader(para_test_data, shuffle=True, batch_size=args.batch_size,
                                           collate_fn=para_test_data.collate_fn)
-        para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size,
-                                         collate_fn=para_dev_data.collate_fn)
-
         sts_test_data = SentencePairTestDataset(sts_test_data, args)
-        sts_dev_data = SentencePairDataset(sts_dev_data, args, isRegression=True)
-
         sts_test_dataloader = DataLoader(sts_test_data, shuffle=True, batch_size=args.batch_size,
                                          collate_fn=sts_test_data.collate_fn)
-        sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size=args.batch_size,
-                                        collate_fn=sts_dev_data.collate_fn)
+        test_para_y_pred, test_para_sent_ids, test_sst_y_pred, \
+        test_sst_sent_ids, test_sts_y_pred, test_sts_sent_ids = \
+        model_eval_test_multitask(sst_test_dataloader,
+                                    para_test_dataloader,
+                                    sts_test_dataloader, model, device)
 
-        dev_paraphrase_accuracy, dev_para_y_pred, dev_para_sent_ids, \
-            dev_sentiment_accuracy,dev_sst_y_pred, dev_sst_sent_ids, dev_sts_corr, \
+    sst_dev_data, num_labels,para_dev_data, sts_dev_data, nli_dev_data = \
+        load_multitask_data(args.nli_dev, args.sst_dev,args.para_dev,args.sts_dev,split='dev')
+    sst_dev_data = SentenceClassificationDataset(sst_dev_data, args)
+    sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size,
+                                    collate_fn=sst_dev_data.collate_fn)
+    para_dev_data = SentencePairDataset(para_dev_data, args) 
+    para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size,
+                                        collate_fn=para_dev_data.collate_fn)
+    sts_dev_data = SentencePairDataset(sts_dev_data, args, isRegression=True)
+    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size=args.batch_size,
+                                    collate_fn=sts_dev_data.collate_fn)
+
+    dev_paraphrase_accuracy, dev_para_y_pred, dev_para_sent_ids, \
+        dev_sentiment_accuracy,dev_sst_y_pred, dev_sst_sent_ids, dev_sts_corr, \
             dev_sts_y_pred, dev_sts_sent_ids = model_eval_multitask(sst_dev_dataloader,
                                                                     para_dev_dataloader,
                                                                     sts_dev_dataloader, model, device)
 
-        test_para_y_pred, test_para_sent_ids, test_sst_y_pred, \
-            test_sst_sent_ids, test_sts_y_pred, test_sts_sent_ids = \
-                model_eval_test_multitask(sst_test_dataloader,
-                                          para_test_dataloader,
-                                          sts_test_dataloader, model, device)
+    with open(args.sst_dev_out, "w+") as f:
+        print(f"dev sentiment acc :: {dev_sentiment_accuracy :.3f}")
+        f.write(f"id \t Predicted_Sentiment \n")
+        for p, s in zip(dev_sst_sent_ids, dev_sst_y_pred):
+            f.write(f"{p} , {s} \n")
 
-        with open(args.sst_dev_out, "w+") as f:
-            print(f"dev sentiment acc :: {dev_sentiment_accuracy :.3f}")
-            f.write(f"id \t Predicted_Sentiment \n")
-            for p, s in zip(dev_sst_sent_ids, dev_sst_y_pred):
-                f.write(f"{p} , {s} \n")
+    with open(args.sts_dev_out, "w+") as f:
+        print(f"dev sts corr :: {dev_sts_corr :.3f}")
+        f.write(f"id \t Predicted_Similiary \n")
+        for p, s in zip(dev_sts_sent_ids, dev_sts_y_pred):
+            f.write(f"{p} , {s} \n")
 
+    with open(args.para_dev_out, "w+") as f:
+        print(f"dev paraphrase acc :: {dev_paraphrase_accuracy :.3f}")
+        f.write(f"id \t Predicted_Is_Paraphrase \n")
+        for p, s in zip(dev_para_sent_ids, dev_para_y_pred):
+            f.write(f"{p} , {s} \n")
+
+    if useTestSet:
         with open(args.sst_test_out, "w+") as f:
             f.write(f"id \t Predicted_Sentiment \n")
             for p, s in zip(test_sst_sent_ids, test_sst_y_pred):
-                f.write(f"{p} , {s} \n")
-
-        with open(args.para_dev_out, "w+") as f:
-            print(f"dev paraphrase acc :: {dev_paraphrase_accuracy :.3f}")
-            f.write(f"id \t Predicted_Is_Paraphrase \n")
-            for p, s in zip(dev_para_sent_ids, dev_para_y_pred):
                 f.write(f"{p} , {s} \n")
 
         with open(args.para_test_out, "w+") as f:
@@ -291,18 +292,12 @@ def test_model_multitask(args, model, device):
             for p, s in zip(test_para_sent_ids, test_para_y_pred):
                 f.write(f"{p} , {s} \n")
 
-        with open(args.sts_dev_out, "w+") as f:
-            print(f"dev sts corr :: {dev_sts_corr :.3f}")
-            f.write(f"id \t Predicted_Similiary \n")
-            for p, s in zip(dev_sts_sent_ids, dev_sts_y_pred):
-                f.write(f"{p} , {s} \n")
-
         with open(args.sts_test_out, "w+") as f:
             f.write(f"id \t Predicted_Similiary \n")
             for p, s in zip(test_sts_sent_ids, test_sts_y_pred):
                 f.write(f"{p} , {s} \n")
 
-        return {'sentiment_classification_accuracy': dev_sentiment_accuracy, 
+    return {'sentiment_classification_accuracy': dev_sentiment_accuracy, 
                 'paraphrase_detection_acccuracy': dev_paraphrase_accuracy,
                 'semantic_textual_similarity_correlation': dev_sts_corr}
 
