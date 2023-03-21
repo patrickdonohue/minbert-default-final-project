@@ -233,7 +233,7 @@ def train_multitask(args):
     model = MultitaskBERT(config)
     if args.option == 'pretrain' and args.model_loader_filepath != "BERT":
         print('using pretrained weights from ' + args.model_loader_filepath)
-        saved = torch.load(args.model_loader_filepath)
+        saved = torch.load("models/" + args.model_loader_filepath)
         config = saved['model_config']
         model.load_state_dict(saved['model'])
     model = model.to(device)
@@ -242,6 +242,7 @@ def train_multitask(args):
     best_dev_acc = 0
     stats = {}
     best_overall_score = 0.507
+    best_stats = {'overall_score': 0}
 
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
@@ -316,6 +317,8 @@ def train_multitask(args):
             print("NEW BEST SCORE!!!")
             best_overall_score = stats['overall_score']
             save_model(model, optimizer, args, config, 'BEST_MODEL.pt')
+        if stats['overall_score'] > best_stats['overall_score']:
+            best_stats = stats
 
         #print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
     if args.save_model == 'T':
@@ -324,7 +327,7 @@ def train_multitask(args):
     # writePredictions = args.write_predictions == 'T'
     # if writePredictions:
     #     stats = test_model_multitask(args, model, device, evalOnTest = writePredictions, writePreds = writePredictions)
-    return model, stats
+    return model, best_stats
 
 
 # def test_model(args, model):
@@ -475,10 +478,6 @@ if __name__ == "__main__":
     args.filepath = 'model_' + args.prefix + '.pt'
     model, stats = train_multitask(args)
     print('saving stats')
-    
-
-    
-    #stats = test_model(args, model)
     hyperparams.update(stats)
     saveStats(hyperparams)
     

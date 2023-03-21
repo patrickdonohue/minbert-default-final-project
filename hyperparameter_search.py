@@ -1,17 +1,18 @@
 #import multitask_classifer.py
 import os
 
-lrs = ['0.8e-5', '1e-5', '1.2e-5']
+lrs = ['5e-6', '1e-5', '2e-5']
 #dropout_rates = ['0.25', '0.3', '0.35']
-dropout_rates = ['0.25', '0.35']
+#dropout_rates = ['0.1', '0.25', '0.35']
+dropout_rates = ['0.3']
 directory = "models"
 #epoch_nums = ['5', '10', '20', '50']
-epoch_nums = ['3', '6']
+epoch_nums = ['6', '10']
 option = 'finetune'
 bert_hidden_sizes = ['768'] # '1536']#['512', '768', '1152']
 taus = ['1e-1', '5e-1'] #look this up!!
 batch_iters = '700' #can't be more than 755
-max_tests = 10 #fix!!!
+max_tests = 100 #fix!!!
 
 
 cnt = 0
