@@ -8,6 +8,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+import torch.optim
 
 from bert import BertModel
 from optimizer import AdamW
@@ -239,6 +240,9 @@ def train_multitask(args):
     model = model.to(device)
     lr = args.lr
     optimizer = AdamW(model.parameters(), lr=lr)
+    if args.optimizer == 'SGD':
+        print('USING SGD OPTIMIZER')
+        optimizer = torch.optim.SGD(model.parameters(), lr = lr)
     best_dev_acc = 0
     stats = {}
     best_overall_score = 0.507
@@ -408,6 +412,7 @@ def get_args():
     parser.add_argument('--write_predictions', type=str, default='F')
     parser.add_argument('--write_predictions_only', type=str, default='F')
     parser.add_argument('--model_loader_filepath', type=str, default='models/BEST_MODEL.pt')
+    parser.add_argument('--optimizer', type=str, default='ADAMW')
     #parser.add_argument('--load_previous_model_for_finetuning', type=str default='')
 
 
