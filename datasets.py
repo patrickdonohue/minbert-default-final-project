@@ -372,9 +372,10 @@ def load_multitask_data(nli_for_simcse_filename, sentiment_filename,paraphrase_f
 
 
 def load_nli_for_simcse_data(filename, split='train'):
+    # cnts = [0,0]
     nli_data = []
     with open(filename, 'r') as fp:
-        for record in csv.DictReader(fp, delimiter=','):
+        for record in csv.DictReader(fp, delimiter=','): #it was commas before!
             #if False:
             if split == 'test' or split =='dev':
                 pass
@@ -384,9 +385,18 @@ def load_nli_for_simcse_data(filename, split='train'):
                 #                  preprocess_string(record['hard_neg']),
                 #                  sent_id))
             else:
-                nli_data.append((preprocess_string(record['sent0']),
-                                 preprocess_string(record['sent1']),
-                                 preprocess_string(record['hard_neg'])))
+                #print(record)
+                try:
+                    # print('ha')
+                    # cnts[0] += 1
+                    nli_data.append((preprocess_string(record['sent0']),
+                                    preprocess_string(record['sent1']),
+                                    preprocess_string(record['hard_neg'])))
+                except:
+                    print('blerg')
+                    # cnts[1] +=1
+    # print("HOW DID WE DO??")
+    # print(cnts)
 
     print(f"Loaded {len(nli_data)} {split} examples from {filename}")
     return nli_data

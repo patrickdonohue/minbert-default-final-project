@@ -18,6 +18,10 @@ from datasets import SentenceClassificationDataset, SentencePairDataset, load_mu
 
 from evaluation import test_model_multitask, model_eval_multitask, model_eval_test_multitask #,model_eval_sst
 
+# from PCGRAD.PTPCGRAD import pcgrad
+# import sys
+# sys.path.append('/PCGRAD/PTPCGRAD')
+# import PCGrad
 
 TQDM_DISABLE=False #change?
 
@@ -76,6 +80,7 @@ class MultitaskBERT(nn.Module):
         self.margin = 0.05 #hard code fpr now	
         self.cosine_similarity = nn.CosineSimilarity(dim=1)
         self.simcse_classifier = torch.nn.Linear(BERT_HIDDEN_SIZE, BERT_HIDDEN_SIZE)
+        self.dropout = torch.nn.Dropout(p = args.hidden_dropout_prob)
 
 
     def forward(self, input_ids, attention_mask):
@@ -87,7 +92,7 @@ class MultitaskBERT(nn.Module):
         
         outputs = self.bert(input_ids, attention_mask)
         pooler_output = outputs['pooler_output']
-        # pooler_output = self.dropout(pooler_output)
+        pooler_output = self.dropout(pooler_output)
         # logits = self.classifier(pooler_output)
         return pooler_output
 
@@ -243,6 +248,9 @@ def train_multitask(args):
     if args.optimizer == 'SGD':
         print('USING SGD OPTIMIZER')
         optimizer = torch.optim.SGD(model.parameters(), lr = lr)
+    if args.use_PCGRAD == 'T':
+        print('USING PCGRAD')
+        optimizer = PCGrad(optimizer)
     best_dev_acc = 0
     stats = {}
     best_overall_score = 0.507
@@ -255,18 +263,20 @@ def train_multitask(args):
         num_batches = 0 
         numBatches = args.batch_iters #should be 750
         dataloaders = [sst_train_dataloader, nli_train_dataloader, para_train_dataloader, sts_train_dataloader]
-        task_names = ['sst', 'nli', 'para', 'sts']
+        #task_names = ['sst', 'nli', 'para', 'sts']
+        task_names = args.task_list
         dataloadersDict = {'sst': iter(sst_train_dataloader), 'nli': iter(nli_train_dataloader),
                             'para': iter(para_train_dataloader), 'sts': iter(sts_train_dataloader)}
 
         #lossFnsDict = {'sst': F.cross_entropy, 'nli': torch.nn.L1Loss, 'para': torch.nn.BCELoss, 'sts':F.mse_loss}
         for batchI in tqdm(range(numBatches), desc=f'train-{epoch}', disable=TQDM_DISABLE):
+            losses = []
             for task_name in task_names:
                 batch = next(dataloadersDict[task_name])
                 #lossFn = lossFnsDict[task_name]
                 optimizer.zero_grad()
                 if task_name == "sst":
-                    if args.just_simcse == 'T':
+                    if args.just_simcse == 'T' or args.just_predict_sts == 'T':
                         continue
                     b_ids, b_mask, b_labels = (batch['token_ids'],
                                         batch['attention_mask'], batch['labels'])
@@ -276,11 +286,11 @@ def train_multitask(args):
                     logits = model.predict_sentiment(b_ids, b_mask)
                     loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / args.batch_size
                 elif task_name == "nli":
-                    if args.use_simcse == 'F' or args.option == 'pretrain':
+                    if args.use_simcse == 'F' or args.option == 'pretrain' or args.just_predict_sts == 'T':
                         continue 
                     loss = model.predict_nli(batch, device, args)
                 elif task_name == 'para':
-                    if args.just_simcse == 'T':
+                    if args.just_simcse == 'T' or args.just_predict_sts == 'T':
                         continue
                     tids1 = batch['token_ids_1'].to(device)
                     mask1 = batch['attention_mask_1'].to(device)
@@ -303,10 +313,16 @@ def train_multitask(args):
                     b_labels = b_labels.to(torch.float32)
                     logits = model.predict_similarity(tids1, mask1, tids2, mask2)
                     loss = F.mse_loss(logits.view(-1), b_labels.view(-1), reduction='sum') / args.batch_size
-                loss.backward()
-                optimizer.step()
+                if args.use_PCGRAD == 'F':
+                    loss.backward()
+                    optimizer.step()
+                else:
+                    losses.append(loss)
                 train_loss += loss.item()
                 num_batches += 1
+            if args.use_PCGRAD == 'T':
+                optimizer.pc_backward(losses)
+                optimizer.step()
 
         train_loss = train_loss / (num_batches)
         # doubly sample paraphrase lr? higher tau should handle this.
@@ -413,6 +429,9 @@ def get_args():
     parser.add_argument('--write_predictions_only', type=str, default='F')
     parser.add_argument('--model_loader_filepath', type=str, default='models/BEST_MODEL.pt')
     parser.add_argument('--optimizer', type=str, default='ADAMW')
+    parser.add_argument('--task_list', type=str, default='all')
+    parser.add_argument('--just_predict_sts', type=str, default='F')
+    parser.add_argument('--use_PCGRAD', type=str, default='F')
     #parser.add_argument('--load_previous_model_for_finetuning', type=str default='')
 
 
@@ -457,11 +476,16 @@ def writeSomethingStupid():
 
 if __name__ == "__main__":
     args = get_args()
-    #args.filepath = f'{args.save_model_dir}/{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
-    #args.filepath = f'{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
-    #args.filepath = 'temp.pt'
+    
+    if args.task_list == 'all':
+        args.task_list = ['sst', 'nli', 'para', 'sts']
+    else:
+        args.task_list = [args.task_list]
+    print(args.task_list)
+
+
     if not areTF([args.use_simcse, args.just_simcse, args.save_model, args.write_predictions,
-                  args.write_predictions_only]):
+                  args.write_predictions_only, args.just_predict_sts, args.use_PCGRAD]):
         raise Exception('bad arg format')
     if args.write_predictions_only == 'T':
         args.prefix = 'BEST_MODEL'
