@@ -18,6 +18,7 @@ from datasets import SentenceClassificationDataset, SentencePairDataset, load_mu
 
 from evaluation import test_model_multitask, model_eval_multitask, model_eval_test_multitask #,model_eval_sst
 from pcgrad import PCGrad
+import matplotlib.pyplot as plt
 
 # from PCGRAD.PTPCGRAD import pcgrad
 # import sys
@@ -53,6 +54,20 @@ N_SENTIMENT_CLASSES = 5
 #         num = torch.sum(torch.exp(cos_sim12 / tau))
 #         denom = torch.sum(torch.exp(cos_sim12/tau) + torch.exp(cos_sim31 / tau))
 #         return -torch.log(num/denom)
+
+
+
+def output_charts(loss, score):
+    print("TEST")
+    print(loss)
+    print(score)
+    fig, (ax, ax1) = plt.subplots(1,2, figsize=(12, 5))
+    ax.plot(loss)
+    ax1.plot(score)
+    ax.set_title("Losses")
+    ax1.set_title("Overall Scores")
+    # plt.show()
+    plt.savefig("graphs1.png")
 
 class MultitaskBERT(nn.Module):
     '''
@@ -254,10 +269,12 @@ def train_multitask(args):
         optimizer = PCGrad(optimizer)
     best_dev_acc = 0
     stats = {}
-    best_overall_score = 0.507
+    best_overall_score = 0.514
     best_stats = {'overall_score': 0}
 
     # Run for the specified number of epochs
+    loss_to_print = []
+    total_scores_print = []
     for epoch in range(args.epochs):
         model.train()
         train_loss = 0
@@ -326,6 +343,7 @@ def train_multitask(args):
                 optimizer.step()
 
         train_loss = train_loss / (num_batches)
+        loss_to_print.append(train_loss)
         # doubly sample paraphrase lr? higher tau should handle this.
 
         # train_acc, train_f1, *_ = model_eval_sst(sst_train_dataloader, model, device)
@@ -334,6 +352,7 @@ def train_multitask(args):
         #         sentiment_accuracy,sst_y_pred, sst_sent_ids,
         #         sts_corr, sts_y_pred, sts_sent_ids) = \
         stats = model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device)
+        total_scores_print.append(stats['overall_score'])
         if stats['overall_score'] > best_overall_score:
             print("NEW BEST SCORE!!!")
             best_overall_score = stats['overall_score']
@@ -348,6 +367,7 @@ def train_multitask(args):
     # writePredictions = args.write_predictions == 'T'
     # if writePredictions:
     #     stats = test_model_multitask(args, model, device, evalOnTest = writePredictions, writePreds = writePredictions)
+    output_charts(loss_to_print, total_scores_print)
     return model, best_stats
 
 
@@ -510,7 +530,8 @@ if __name__ == "__main__":
                     'model_loader_filepath': args.model_loader_filepath}
     seed_everything(args.seed)  # fix the seed for reproducibility
     args.prefix = stripBadChars(str(hyperparams))
-    args.filepath = 'model_' + args.prefix + '.pt'
+    args.filepath = 'model_' + args.prefix + '.pt' ## make this image path
+    args.img_path = 'model_' + args.prefix + '.png' 
     model, stats = train_multitask(args)
     print('saving stats')
     hyperparams.update(stats)
