@@ -26,7 +26,7 @@ from datasets import load_multitask_data, load_multitask_test_data, \
     SentencePairDataset, SentencePairTestDataset
 
 
-TQDM_DISABLE = True
+TQDM_DISABLE = False
 
 # # Evaluate a multitask model for accuracy.on SST only.
 # def model_eval_sst(dataloader, model, device):
@@ -255,7 +255,8 @@ def test_model_multitask(args, model, device, evalOnTest = True, writePreds = Tr
             model_eval_test_multitask(sst_test_dataloader,
                                         para_test_dataloader,
                                         sts_test_dataloader, model, device)
-
+            print("TEST DATA LOADED AND EVALED")
+        
         sst_dev_data, num_labels,para_dev_data, sts_dev_data, nli_dev_data = \
             load_multitask_data(args.nli_dev, args.sst_dev,args.para_dev,args.sts_dev,split='dev')
         sst_dev_data = SentenceClassificationDataset(sst_dev_data, args)
@@ -274,7 +275,7 @@ def test_model_multitask(args, model, device, evalOnTest = True, writePreds = Tr
                                                                         para_dev_dataloader,
                                                                         sts_dev_dataloader, model, device,
                                                                         oldReturn = True)
-
+        print("TRAIN DATA LOADED AND EVALED")
         print(f"dev sentiment acc :: {dev_sentiment_accuracy :.3f}")
         print(f"dev sts corr :: {dev_sts_corr :.3f}")
         print(f"dev paraphrase acc :: {dev_paraphrase_accuracy :.3f}")
@@ -296,6 +297,7 @@ def test_model_multitask(args, model, device, evalOnTest = True, writePreds = Tr
                 f.write(f"id \t Predicted_Is_Paraphrase \n")
                 for p, s in zip(dev_para_sent_ids, dev_para_y_pred):
                     f.write(f"{p} , {s} \n")
+            print("DEV PREDS WRITTEN")
 
         if evalOnTest and writePreds:
             with open('predictions/' + args.prefix + args.sst_test_out, "w") as f:
@@ -312,6 +314,7 @@ def test_model_multitask(args, model, device, evalOnTest = True, writePreds = Tr
                 f.write(f"id \t Predicted_Similiary \n")
                 for p, s in zip(test_sts_sent_ids, test_sts_y_pred):
                     f.write(f"{p} , {s} \n")
+            print("TEST PREDS WRITTEN")
 
         ret = addOverallScore({'sentiment_classification_accuracy': dev_sentiment_accuracy, 
                     'paraphrase_detection_acccuracy': dev_paraphrase_accuracy,

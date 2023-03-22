@@ -319,7 +319,7 @@ def train_multitask(args):
                 else:
                     losses.append(loss)
                 train_loss += loss.item()
-                num_batches += 1
+            num_batches += 1
             if args.use_PCGRAD == 'T':
                 optimizer.pc_backward(losses)
                 optimizer.step()
@@ -375,6 +375,7 @@ def writePredictions(args):
         model = MultitaskBERT(config)
         model.load_state_dict(saved['model'])
         model = model.to(device)
+        print('model loaded')
         return test_model_multitask(args, model, device, evalOnTest = False, writePreds = True)
 
 
@@ -421,7 +422,7 @@ def get_args():
     parser.add_argument('--nli_dev', type=str, default='data/nli_for_simcse-dev.csv')
     parser.add_argument('--nli_test', type=str, default='data/nli_for_simcse-test.csv')
     parser.add_argument('--tau', type=float, default=5e-2) #TODO. Does this default value make any sense?
-    parser.add_argument('--batch_iters', type=int, default=700) 
+    parser.add_argument('--batch_iters', type=int, default=180) 
     parser.add_argument('--use_simcse', type=str, default='T')
     parser.add_argument('--just_simcse', type=str, default='F')
     parser.add_argument('--save_model', type=str, default='F')
@@ -488,6 +489,7 @@ if __name__ == "__main__":
                   args.write_predictions_only, args.just_predict_sts, args.use_PCGRAD]):
         raise Exception('bad arg format')
     if args.write_predictions_only == 'T':
+        print('writing predictions, then exiting')
         args.prefix = 'BEST_MODEL'
         writePredictions(args)
         exit(0)
