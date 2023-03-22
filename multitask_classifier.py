@@ -17,6 +17,7 @@ from tqdm import tqdm
 from datasets import SentenceClassificationDataset, SentencePairDataset, load_multitask_data, load_multitask_test_data, NLIDataset
 
 from evaluation import test_model_multitask, model_eval_multitask, model_eval_test_multitask #,model_eval_sst
+from pcgrad import PCGrad
 
 # from PCGRAD.PTPCGRAD import pcgrad
 # import sys
@@ -439,9 +440,10 @@ def get_args():
     args = parser.parse_args()
     return args
 
-NAME = 'NEWEST_model_summaries.csv'
-STATS = ['lr', 'option', 'dropout_prob', 'epochs', 'just_simcse', 'use_simcse', 
-         'tau', 'paraphrase_detection_acccuracy', 'sentiment_classification_accuracy',
+NAME = 'FINAL_model_summaries.csv'
+STATS = ['lr', 'option', 'dropout_prob', 'epochs', 'just_simcse', 'use_simcse', 'tau',
+        'task_list', 'optimizer', 'use_PCGRAD', 'model_loader_filepath',
+          'paraphrase_detection_acccuracy', 'sentiment_classification_accuracy',
           'semantic_textual_similarity_correlation', 'overall_score']
 def createDataframe():
     print("CREATING DATAFRAME, CLOBBERING OLD THINGS")
@@ -503,7 +505,9 @@ if __name__ == "__main__":
         raise Exception('bad arg format')
     hyperparams = {'lr': args.lr, 'option': args.option, 'epochs':args.epochs, 
                     'dropout_prob': args.hidden_dropout_prob, 'just_simcse': args.just_simcse,
-                    'use_simcse': args.use_simcse, 'tau': args.tau}
+                    'use_simcse': args.use_simcse, 'tau': args.tau,
+                    'task_list':args.task_list, 'optimizer':args.optimizer, 'use_pcgrad':args.use_PCGRAD,
+                    'model_loader_filepath': args.model_loader_filepath}
     seed_everything(args.seed)  # fix the seed for reproducibility
     args.prefix = stripBadChars(str(hyperparams))
     args.filepath = 'model_' + args.prefix + '.pt'

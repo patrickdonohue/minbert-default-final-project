@@ -1,0 +1,4 @@
+lr,option,dropout_prob,epochs,just_simcse,use_simcse,tau,task_list,optimizer,use_PCGRAD,model_loader_filepath,paraphrase_detection_acccuracy,sentiment_classification_accuracy,semantic_textual_similarity_correlation,overall_score,use_pcgrad
+1e-05,finetune,0.3,0,F,T,5.0,"['sst', 'nli', 'para', 'sts']",ADAMW,,models/BEST_MODEL.pt,,,,0.0,T
+1e-05,finetune,0.3,3,F,T,5.0,"['sst', 'nli', 'para', 'sts']",ADAMW,,models/BEST_MODEL.pt,0.6250742133386107,0.2815622161671208,0.0788532373528581,0.3284965556195299,T
+1e-05,finetune,0.3,0,F,T,5.0,"['sst', 'nli', 'para', 'sts']",ADAMW,,models/BEST_MODEL.pt,,,,0.0,T
